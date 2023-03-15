@@ -11,7 +11,7 @@
 #include <sys/types.h>
 #include <io.h>
 #include <future>
-#include "./fixed_thread_pool.cpp"
+#include "./SimpleThreadPool.cpp"
 #include <future>
 #include <functional>
 #include <iostream>
@@ -22,10 +22,16 @@
 #include <cassert>
 #include <fstream>
 #include <Windows.h>
+#include <forward_list>
+#include <map>
+#include <sys/time.h>
 
 using namespace std;
 vector<std::string> files;
+int bing = std::thread::hardware_concurrency();
 
+forward_list<string> fList;
+multimap<long, string> multiMap;
 
 
 
@@ -39,17 +45,45 @@ fixed_thread_pool *pool;
 std::atomic<int> finishNum;
 std::atomic<int> works;
 std::atomic<int> fileIndex;
-vector<future<void>> v_future;
-string *arr = new string[1000];
+mutex m;
+
+struct Node {
+    Node *next;
+    string path;
+
+    Node(string p) : path(std::move(p)) {}
+};
+
+class Link {
+public:
+    Node *head, *end;
+    long len;
+
+    Link() : head(new Node("")) {
+        end = head;
+    }
+
+
+    void push(Node *&&nNode) {
+        end->next = std::forward<Node *>(nNode);
+        end = end->next;
+        len++;
+    }
+
+    long size() const {
+        return len;
+    }
+
+};
+
+Link *mLink = new Link();
 
 void getFiles(const string &path) {
+    Link *tempLink = new Link();
     works++;
-//    string path = *(string *) arg;
-//    std::cout << path.c_str() << endl << flush;
     std::thread::id this_id = std::this_thread::get_id();
     unsigned int t = *(unsigned int *) &this_id;
     int fileSize = 0;
-//    std::cout << "thread-" << t << "path" << path.c_str() << std::endl << std::flush;
 //文件句柄，win10用long long，win7用long就可以了
     long long hFile = 0;
 //文件信息
@@ -64,26 +98,35 @@ void getFiles(const string &path) {
 //                    getFiles(temp);
 //                    std::packaged_task<void(string)> task(getFiles);
 //                    v_future.emplace_back(std::move(task.get_future()));
-                    pool->execute([=] { getFiles(temp); });
+                    pool->execute(getFiles, temp);
 //                    task.get_future().wait();
                 }
             } else {
                 fileSize++;
                 string f = path + "\\" + fileinfo.name;
-                arr[fileIndex++] = f;
-                std::cout<<"fileIndex> "<<fileIndex<<f<<" path end"<<endl;
-
-//                cout <<"thread - "<<t<< "  vector  " << f << endl << flush;
-//                cout <<"thread - function"<<t<< flush;
-//                printf("path %s\n", f.c_str());
-                files.push_back(f);
+//                arr[fileIndex++] = f;
+                fileIndex++;
+//                std::cout << "fileIndex> " << fileIndex << f << " path end" << endl;
+//                m.lock();
+                tempLink->push(new Node(f));
+//                multiMap.insert(std::pair<long, std::string>(fileinfo.time_write, f));
+//                m.unlock();
             }
         } while (_findnext(hFile, &fileinfo) == 0);
         _findclose(hFile);
         ::finishNum++;
+
+
+        m.lock();
+        mLink->end->next = tempLink->head->next;
+        mLink->end = tempLink->end;
+        mLink->len += tempLink->len;
+        m.unlock();
+
+
         string msg =
                 "\n file> " + std::to_string(fileSize) + "  thread > " + std::to_string(t) + " " + path.c_str();
-        std::cout << msg;
+//        std::cout << msg;
 //        std::cout <<<<  <<  << t <<" "<< path.c_str() <<" "<< endl ;
 
 //        std::cout << "before-thread-close-" << t << "path" << path.c_str() << std::endl << std::flush;
@@ -95,9 +138,9 @@ void getFiles(const string &path) {
 
 
 long int getMs() {
-    //struct timeval tp;
-    //gettimeofday(&tp, nullptr);
-    //return tp.tv_sec * 1000 + tp.tv_usec / 1000;
+    struct timeval tp;
+    gettimeofday(&tp, nullptr);
+    return tp.tv_sec * 1000 + tp.tv_usec / 1000;
 }
 
 void Stringsplit(const string &str, const char split, vector<string> &res) {
@@ -116,34 +159,42 @@ void Stringsplit(const string &str, const char split, vector<string> &res) {
     }
 }
 
+class a {
+
+};
+
+mutex tmux;
+
+void ttt() {
+//    ::tmux.unlock();
+//    printf("ttt lock");
+//    tmux.lock();
+//    tmux.unlock();
+    cout << "ttt lock" << flush;
+}
+
+
 int main(void) {
+    vector<string> tes;
+    tes.resize(7777);
+    for (int i = 0; i < 20 * 10000; ++i) {
+        tes.push_back(std::to_string(i) + "897897897878979898");
+        if (i % 1000 == 0) {
+            cout << tes.capacity() << endl << flush;
+        }
+    }
+    cout << tes.size() << flush << endl;
+    tes.shrink_to_fit();
+    cout << tes.capacity() << flush << endl;
+    tes.emplace_back("sdfsfd");
+    cout << tes.size() << flush << endl;
+    tes.clear();
+    cout << tes.size() << flush << endl;
 
-//    string wan,test;
-//    ifstream readFile("D:\\BigFile\\huaweibak\\wanzheng.txt");
-//    ifstream r2("D:\\BigFile\\huaweibak\\test.txt");
-//    readFile >> wan;
-//    r2 >> test;
-//    vector<string> vwan,vtest;
-//    Stringsplit(wan, '*',vwan);
-//    Stringsplit(test, '*',vtest);
-//
-//    vwan.pop_back();
-//    vtest.pop_back();
-//    cout<<vwan.size()<<endl;
-//    cout<<vtest.size()<<endl;
-////    for (auto all_in :vwan) {
-//        for (auto name :vwan) {
-//            if(test.find(name) == string :: npos)
-//            cout<<name<<endl<<flush;
-//        }
-////    }
-//
-//    return 0;
-    files.resize(1000);
-
+    return 0;
     //检测硬件并发特性(此句只是用来显示计算机支持的并发线程数量)
-    std::cout << std::thread::hardware_concurrency() << std::endl;
-    string path = "D:\\apache-tomcat-8.5.78";
+    std::cout << bing << std::endl;
+    string path = "D:\\Download";
 
     long start = getMs();
 
@@ -151,55 +202,39 @@ int main(void) {
 //
 //    return 0;
 
-    pool = new fixed_thread_pool(4);
-//    std::packaged_task<void(string)> task(getFiles);
+    pool = new fixed_thread_pool(bing);
+    std::packaged_task<void(string)> task(getFiles);
+
 //    v_future.emplace_back(std::move(task.get_future()));
-    pool->execute([=] { getFiles(path); });
+    pool->execute(getFiles, path);
+//    pool->execute([=] { getFiles(path); });
 //    getFiles(path);
     std::thread::id this_id = std::this_thread::get_id();
     unsigned int t = *(unsigned int *) &this_id;
     printf("主线程%d\n", t);
 
     pool->waitFinish();
-//    sleep(3);
-
-
-//    //调用ofstream类创建myout对象
-//    ofstream myout("D:\\BigFile\\huaweibak\\wanzheng.txt", ios::in | ios::out | ios::app);
-//
-//    if (myout.is_open()) {
-//        /*在屏幕上输入，输出到文件*/
-//        string Char;
-////        cin >> Char;
-//        for (string name:files) {
-//            Char += (name + "*");
-//        }
-//        myout << Char << endl;
+//    auto vf=pool->v_future;
+//    for (auto &item:vf) {
+//        item.get_future().get();
 //    }
-//    myout.close();
-//
-//
-//    cout << "over" << endl;
-//    sleep(2);
-    //Sleep(2);
-//    while (true) {
-//    cout << " size " << files.size() << endl << flush;
-//    cout << " works " << works.load(std::memory_order_relaxed) << endl << flush;
-//    cout << " endSize " << finishNum.load(std::memory_order_relaxed) << endl << flush;
-
-//        std::cout << data_.use_count() << std::endl << std::flush;
+    cout << " size " << multiMap.size() << endl << flush;
+    cout << " size " << mLink->size() << endl << flush;
+    cout << " works " << works.load(std::memory_order_relaxed) << endl << flush;
+    cout << " endSize " << finishNum.load(std::memory_order_relaxed) << endl << flush;
 //    }
-    while (true) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-//        sleep(2);
-        cout << " fileIndex " << fileIndex.load(std::memory_order_relaxed) << endl << flush;
-        cout << " lastPath " << arr[fileIndex-1] << endl << flush;
-        cout << " size " << files.size() << endl << flush;
-        cout << " works " << works.load(std::memory_order_relaxed) << endl << flush;
-        cout << " endSize " << finishNum.load(std::memory_order_relaxed) << endl << flush;
+    cout << "bing " << bing << " getMsTime " << getMs() - start << endl << flush;
+
+    start = getMs();
+//    for (multimap<long, string>::reverse_iterator p = multiMap.rbegin(); p != multiMap.rend(); p++)
+////    for (multimap<long, string>::iterator p = multiMap.begin(); p != multiMap.end(); p++)
+//        cout<< p->second << endl;
+    Node *h = mLink->head->next;
+    while (h) {
+//        cout << h->path << "\n";
+        h = h->next;
     }
-    cout << "getMsTime" << getMs() - start << endl << flush;
-    cout << "all tasks done" << " size " << files.size() << endl << flush;
+    cout << "遍历 getMsTime " << getMs() - start << endl << flush;
 
     return 0;
 }

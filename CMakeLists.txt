@@ -22,5 +22,5 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_STRUCT_TIMESPEC")
 
 
 
-add_executable(aa main.cpp  fixed_thread_pool.cpp)
+add_executable(aa main.cpp SimpleThreadPool.cpp)
 
